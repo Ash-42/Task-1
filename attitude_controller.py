@@ -26,14 +26,15 @@ class Edrone():
         self.pwm_cmd.prop3 = 0.0
         self.pwm_cmd.prop4 = 0.0
 
-        self.Kp = [0, 0, 0]
-        self.Ki = [0, 0, 0]
-        self.Kd = [0, 0, 0]
+        self.Kp = [0, 0, 0, 0]
+        self.Ki = [0, 0, 0, 0]
+        self.Kd = [0, 0, 0, 0]
 
         self.prev_values = [0.0, 0.0, 0.0]
         self.iTerm = [0.0, 0.0, 0.0]
         self.outputs = [0.0, 0.0, 0.0]
-
+        self.thrust = 0.0
+        self.thrust_setpt = 0.0
         self.min_values = [0, 0, 0, 0]
         self.max_values = [1024, 1024, 1024, 1024]
 
@@ -63,6 +64,7 @@ class Edrone():
         self.setpoint_cmd[0] = msg.rcRoll
         self.setpoint_cmd[1] = msg.rcPitch
         self.setpoint_cmd[2] = msg.rcYaw
+        self.thrust_cmd = msg.rcThrottle
 
     def roll_set_pid(self, roll):
         self.Kp[0] = roll.Kp
@@ -79,9 +81,6 @@ class Edrone():
         self.Ki[2] = yaw.Ki * self.sample_time
         self.Kd[2] = yaw.Kd / self.sample_time
 
-    def alt_set_pid(self, alt):
-        self.throttle = alt
-
     def transform_inputs(self):
         (self.drone_orientation_euler[0],
          self.drone_orientation_euler[1],
@@ -94,6 +93,8 @@ class Edrone():
         self.setpoint_euler[0] = self.setpoint_cmd[0] * 0.02 - 30
         self.setpoint_euler[1] = self.setpoint_cmd[1] * 0.02 - 30
         self.setpoint_euler[2] = self.setpoint_cmd[2] * 0.02 - 30
+
+        self.thrust = self.thrust_setpt * 1.023 - 1023
 
     def calculate_errors(self, errors):
         errors[0] = self.setpoint_euler[0] - self.drone_orientation_euler[0]
@@ -123,7 +124,7 @@ class Edrone():
         self.iTerm[1] += (self.Ki[1] * errors[1])
         self.iTerm[2] += (self.Ki[2] * errors[2])
 
-        self.set_value_bounds(values='inputs')
+        # self.set_value_bounds(values='inputs')
 
         delta_roll = self.drone_orientation_euler[0] - self.prev_values[0]
         delta_pitch = self.drone_orientation_euler[1] - self.prev_values[1]
@@ -133,13 +134,22 @@ class Edrone():
         self.outputs[1] = self.Kp[1] * errors[1] + self.iTerm[1] - self.Kd[1] * delta_pitch
         self.outputs[2] = self.Kp[2] * errors[2] + self.iTerm[2] - self.Kd[2] * delta_yaw
 
-        self.set_value_bounds(values='outputs')
+        # self.set_value_bounds(values='outputs')
 
     def set_prev_vals(self):
         self.prev_values[0] = self.drone_orientation_euler[0]
         self.prev_values[1] = self.drone_orientation_euler[1]
         self.prev_values[2] = self.drone_orientation_euler[2]
         self.last_time = now
+
+    def calculate_prop_speeds(self):
+        out_roll, out_pitch, out_yaw = self.outputs[0],
+                                       self.outputs[1],
+                                       self.outputs[2]
+        self.pwm_cmd.prop1 = self.thrust + out_roll + out_pitch + out_yaw
+        self.pwm_cmd.prop2 = self.thrust - out_roll + out_pitch - out_yaw
+        self.pwm_cmd.prop3 = self.thrust + out_roll - out_pitch - out_yaw
+        self.pwm_cmd.prop4 = self.thrust - out_roll - out_pitch + out_yaw
 
     def pid(self):
         now = time.time()
@@ -153,6 +163,7 @@ class Edrone():
             self.calculate_pid_eq(errors)
             print 'PWM Outputs: [{}, {}, {}]'.format(self.outputs[0], self.outputs[1], self.outputs[2])
             self.set_prev_vals()
+            self.calculate_prop_speeds()
             self.pwm_pub.publish(self.pwm_cmd)
 
 if __name__ == '__main__':
