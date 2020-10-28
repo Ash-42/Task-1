@@ -34,8 +34,8 @@ class Edrone():
         self.iTerm = [0.0, 0.0, 0.0]
         self.outputs = [0.0, 0.0, 0.0]
         self.thrust = 0.0
-        self.min_values = [0, 0, 0, 0]
-        self.max_values = [1023, 1023, 1023, 1023]
+        self.min_value = 0
+        self.max_value = 1023
 
         self.last_time = 0.0
         self.sample_time = 0.060
@@ -130,6 +130,13 @@ class Edrone():
         self.prev_errors[2] = errors[2]
         # self.last_time = now
 
+    def set_prop_bounds(self, pwm_prop_speed):
+        if pwm_prop_speed > self.max_value:
+            return self.max_value
+        if pwm_prop_speed < self.min_value:
+            return self.min_value
+        return pwm_prop_speed
+
     def calculate_prop_speeds(self):
         [out_roll, out_pitch, out_yaw] = [self.outputs[0],
                                           self.outputs[1],
@@ -138,10 +145,16 @@ class Edrone():
         self.pwm_cmd.prop2 = self.thrust - out_roll + out_pitch - out_yaw
         self.pwm_cmd.prop3 = self.thrust + out_roll - out_pitch - out_yaw
         self.pwm_cmd.prop4 = self.thrust - out_roll - out_pitch + out_yaw
-        print 'Speeds: [{}, {}, {}, {}]'.format(self.pwm_cmd.prop1,
-                                                self.pwm_cmd.prop2,
-                                                self.pwm_cmd.prop3,
-                                                self.pwm_cmd.prop4)
+
+        pwm_cmds = [self.pwm_cmd.prop1,
+                    self.pwm_cmd.prop2,
+                    self.pwm_cmd.prop3,
+                    self.pwm_cmd.prop4]
+        [self.pwm_cmd.prop1,
+         self.pwm_cmd.prop2,
+         self.pwm_cmd.prop3,
+         self.pwm_cmd.prop4] = pwm_cmds = map(self.set_prop_bounds, pwm_cmds)
+        print 'Speeds: [{}, {}, {}, {}]'.format(*pwm_cmds)
 
     def pid(self):
         # now = time.time()
@@ -156,8 +169,8 @@ class Edrone():
         self.calculate_prop_speeds()
         self.pwm_pub.publish(self.pwm_cmd)
 
-        # print 'Errors: [{}, {}, {}]'.format(errors[0], errors[1], errors[2])
-        # print 'PWM Outputs: [{}, {}, {}]'.format(self.outputs[0], self.outputs[1], self.outputs[2])
+        print 'Errors: [{}, {}, {}]'.format(errors[0], errors[1], errors[2])
+        print 'PWM Outputs: [{}, {}, {}]'.format(self.outputs[0], self.outputs[1], self.outputs[2])
 
 if __name__ == '__main__':
     E_DRONE = Edrone()
