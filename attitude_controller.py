@@ -124,11 +124,10 @@ class Edrone():
         self.outputs[1] = pTerm[1] + self.iTerm[1] + dTerm[1]
         self.outputs[2] = pTerm[2] + self.iTerm[2] + dTerm[2]
 
-    def set_prev_vals(self, errors):        # , now):
+    def set_prev_vals(self, errors):
         self.prev_errors[0] = errors[0]
         self.prev_errors[1] = errors[1]
         self.prev_errors[2] = errors[2]
-        # self.last_time = now
 
     def set_prop_bounds(self, pwm_prop_speed):
         if pwm_prop_speed > self.max_value:
@@ -138,9 +137,7 @@ class Edrone():
         return pwm_prop_speed
 
     def calculate_prop_speeds(self):
-        [out_roll, out_pitch, out_yaw] = [self.outputs[0],
-                                          self.outputs[1],
-                                          self.outputs[2]]
+        out_roll, out_pitch, out_yaw = [i for i in self.outputs]
         self.pwm_cmd.prop1 = self.thrust + out_roll + out_pitch + out_yaw
         self.pwm_cmd.prop2 = self.thrust - out_roll + out_pitch - out_yaw
         self.pwm_cmd.prop3 = self.thrust + out_roll - out_pitch - out_yaw
@@ -157,20 +154,16 @@ class Edrone():
         print 'Speeds: [{}, {}, {}, {}]'.format(*pwm_cmds)
 
     def pid(self):
-        # now = time.time()
-        # delta_time = now - self.last_time
-        # if delta_time < self.sample_time:
-        #     return
         errors = [0.0, 0.0, 0.0]
         self.transform_inputs()
         self.calculate_errors(errors)
         self.calculate_pid_eq(errors)
-        self.set_prev_vals(errors)      # , now)
+        self.set_prev_vals(errors)
         self.calculate_prop_speeds()
         self.pwm_pub.publish(self.pwm_cmd)
 
-        print 'Errors: [{}, {}, {}]'.format(errors[0], errors[1], errors[2])
-        print 'PWM Outputs: [{}, {}, {}]'.format(self.outputs[0], self.outputs[1], self.outputs[2])
+        print 'Errors: [{}, {}, {}]'.format(*errors)
+        print 'PWM Outputs: [{}, {}, {}]'.format(*self.outputs)
 
 if __name__ == '__main__':
     E_DRONE = Edrone()
