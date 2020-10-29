@@ -36,8 +36,6 @@ class Edrone():
         self.thrust = 0.0
         self.min_value = 0
         self.max_value = 1023
-
-        self.last_time = 0.0
         self.sample_time = 0.060
 
         self.pwm_pub = rospy.Publisher('/edrone/pwm', prop_speed, queue_size=1)
@@ -79,8 +77,8 @@ class Edrone():
         self.Kd[2] = yaw.Kd / self.sample_time
 
     def transform_inputs(self):
-        (self.drone_orientation_euler[0],
-         self.drone_orientation_euler[1],
+        (self.drone_orientation_euler[1],
+         self.drone_orientation_euler[0],
          self.drone_orientation_euler[2]) = tf.transformations.euler_from_quaternion(
         [self.drone_orientation_quaternion[0],
          self.drone_orientation_quaternion[1],
@@ -93,7 +91,7 @@ class Edrone():
 
         self.thrust = self.setpoint_cmd[3] * 1.023 - 1023
 
-        print 'Commands : [{}, {}, {}, {}]'.format(self.setpoint_euler[0],
+        print 'Set Angle: [{}, {}, {}, {}]'.format(self.setpoint_euler[0],
                                                    self.setpoint_euler[1],
                                                    self.setpoint_euler[2],
                                                    self.thrust)
@@ -106,6 +104,8 @@ class Edrone():
         self.roll_error_pub.publish(errors[0])
         self.pitch_error_pub.publish(errors[1])
         self.yaw_error_pub.publish(errors[2])
+
+        print 'Actual angle: [{}, {}, {}]'.format(*self.drone_orientation_euler)
 
     def calculate_pid_eq(self, errors):
         pTerm = [self.Kp[0] * errors[0],
@@ -138,10 +138,10 @@ class Edrone():
 
     def calculate_prop_speeds(self):
         out_roll, out_pitch, out_yaw = [i for i in self.outputs]
-        self.pwm_cmd.prop1 = self.thrust + out_roll + out_pitch + out_yaw
-        self.pwm_cmd.prop2 = self.thrust - out_roll + out_pitch - out_yaw
-        self.pwm_cmd.prop3 = self.thrust + out_roll - out_pitch - out_yaw
-        self.pwm_cmd.prop4 = self.thrust - out_roll - out_pitch + out_yaw
+        self.pwm_cmd.prop1 = self.thrust + out_roll - out_pitch + out_yaw   # front right
+        self.pwm_cmd.prop2 = self.thrust + out_roll + out_pitch - out_yaw   # back right
+        self.pwm_cmd.prop3 = self.thrust - out_roll + out_pitch + out_yaw   # back left
+        self.pwm_cmd.prop4 = self.thrust - out_roll - out_pitch - out_yaw   # front left
 
         pwm_cmds = [self.pwm_cmd.prop1,
                     self.pwm_cmd.prop2,
@@ -161,9 +161,8 @@ class Edrone():
         self.set_prev_vals(errors)
         self.calculate_prop_speeds()
         self.pwm_pub.publish(self.pwm_cmd)
-
-        print 'Errors: [{}, {}, {}]'.format(*errors)
-        print 'PWM Outputs: [{}, {}, {}]'.format(*self.outputs)
+        # print 'Errors: [{}, {}, {}]'.format(*errors)
+        # print 'PWM Outputs: [{}, {}, {}]'.format(*self.outputs)
 
 if __name__ == '__main__':
     E_DRONE = Edrone()
