@@ -116,9 +116,9 @@ class Edrone():
                  self.Kd[1] * (errors[1] - self.prev_errors[1]),
                  self.Kd[2] * (errors[2] - self.prev_errors[2])]
 
-        self.iTerm[0] = self.Ki[0] * (self.iTerm[0] + errors[0])
-        self.iTerm[1] = self.Ki[1] * (self.iTerm[1] + errors[1])
-        self.iTerm[2] = self.Ki[2] * (self.iTerm[2] + errors[2])
+        self.iTerm[0] += (self.Ki[0] * errors[0])
+        self.iTerm[1] += (self.Ki[1] * errors[1])
+        self.iTerm[2] += (self.Ki[2] * errors[2])
 
         self.outputs[0] = pTerm[0] + self.iTerm[0] + dTerm[0]
         self.outputs[1] = pTerm[1] + self.iTerm[1] + dTerm[1]

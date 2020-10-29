@@ -16,14 +16,14 @@ class ControlSystem():
 
         # [latitude, longitude, altitude]
         self.position_gps = [0.0, 0.0, 0.0]
-        self.setpoint_gps = [19.0001, 72.0000, 1]
+        self.setpoint_gps = [25, 100, 5]
 
         # [roll, pitch, altitude]
         self.Kp = [0, 0, 0]
         self.Ki = [0, 0, 0]
         self.Kd = [0, 0, 0]
 
-        self.prev_pid_errors = [0.0, 0.0, 0.0]
+        self.prev_errors = [0.0, 0.0, 0.0]
         self.iTerm = [0.0, 0.0, 0.0]
         self.outputs = [0.0, 0.0, 0.0]
         self.min_value = 1000
@@ -49,9 +49,9 @@ class ControlSystem():
         rospy.Subscriber('/pid_tuning_altitude', PidTune, self.alt_set_pid)
 
     def gps_callback(self, msg):
-        self.latitude = msg.latitude
-        self.longitude = msg.longitude
-        self.altitude = msg.altitude
+        self.position_gps[0] = msg.latitude
+        self.position_gps[1] = msg.longitude
+        self.position_gps[2] = msg.altitude
 
     def roll_set_pid(self, roll):
         self.Kp[0] = roll.Kp * 0.06
@@ -68,43 +68,37 @@ class ControlSystem():
         self.Ki[2] = alt.Ki * 0.008
         self.Kd[2] = alt.Kd * 0.3
 
-    def calculate_pos_errors(self, errors):
-        errors[0] = self.setpoint_gps[0] - self.position_gps[0]
-        errors[1] = self.setpoint_gps[1] - self.position_gps[1]
-        errors[2] = self.setpoint_gps[2] - self.position_gps[2]
+    def calculate_errors(self, gps_errors):
+        gps_errors[0] = self.setpoint_gps[0] - self.position_gps[0]
+        gps_errors[1] = self.setpoint_gps[1] - self.position_gps[1]
+        gps_errors[2] = self.setpoint_gps[2] - self.position_gps[2]
 
-    def world_to_body_conversion(self, gps_errors, pid_errors):
-        lat_error, long_error, alt_error = [*gps_errors]
-
-        tan_roll = alt_error / lat_error
-        tan_pitch = long_error / alt_error
-        tan_yaw = lat_error / long_error
-
-        pid_errors[0] = math.degrees(math.atan(tan_roll))
-        pid_errors[1] = math.degrees(math.atan(tan_pitch))
-        pid_errors[2] = math.degrees(math.atan(tan_yaw))
+        print 'GPS Posion: [{}, {}, {}]'.format(*self.position_gps)
+        print 'GPS Errors: [{}, {}, {}]'.format(*gps_errors)
 
     def calculate_pid_eq(self, errors):
         pTerm = [self.Kp[0] * errors[0],
                  self.Kp[1] * errors[1],
                  self.Kp[2] * errors[2]]
 
-        dTerm = [self.Kd[0] * (errors[0] - self.prev_pid_errors[0]),
-                 self.Kd[1] * (errors[1] - self.prev_pid_errors[1]),
-                 self.Kd[2] * (errors[2] - self.prev_pid_errors[2])]
+        dTerm = [self.Kd[0] * (errors[0] - self.prev_errors[0]),
+                 self.Kd[1] * (errors[1] - self.prev_errors[1]),
+                 self.Kd[2] * (errors[2] - self.prev_errors[2])]
 
-        self.iTerm[0] = self.Ki[0] * (self.iTerm[0] + errors[0])
-        self.iTerm[1] = self.Ki[1] * (self.iTerm[1] + errors[1])
-        self.iTerm[2] = self.Ki[2] * (self.iTerm[2] + errors[2])
+        self.iTerm[0] += (self.Ki[0] * errors[0])
+        self.iTerm[1] += (self.Ki[1] * errors[1])
+        self.iTerm[2] += (self.Ki[2] * errors[2])
 
         self.outputs[0] = pTerm[0] + self.iTerm[0] + dTerm[0]
         self.outputs[1] = pTerm[1] + self.iTerm[1] + dTerm[1]
         self.outputs[2] = pTerm[2] + self.iTerm[2] + dTerm[2]
 
+        print 'Outputs:  [{}, {}, {}]\n'.format(*self.outputs)
+
     def set_prev_vals(self, errors):
-        self.prev_pid_errors[0] = errors[0]
-        self.prev_pid_errors[1] = errors[1]
-        self.prev_pid_errors[2] = errors[2]
+        self.prev_errors[0] = errors[0]
+        self.prev_errors[1] = errors[1]
+        self.prev_errors[2] = errors[2]
 
     def set_cmd_bounds(self, euler_angle):
         if euler_angle > self.max_value:
@@ -119,7 +113,7 @@ class ControlSystem():
                    self.outputs[2]]
         [self.outputs[0],
          self.outputs[1],
-         self.outputs[2]] = outputs = map(set_cmd_bounds, outputs)
+         self.outputs[2]] = outputs = map(self.set_cmd_bounds, outputs)
 
     def publish_attitude(self):
         self.drone_cmd.rcRoll = self.outputs[0]
@@ -130,11 +124,9 @@ class ControlSystem():
 
     def pid(self):
         gps_errors = [0.0, 0.0, 0.0]
-        pid_errors = [0.0, 0.0, 0.0]
-        self.calculate_pos_errors(gps_errors)
-        self.world_to_body_conversion(gps_errors, pid_errors)
-        self.calculate_pid_eq(pid_errors)
-        self.set_prev_vals(pid_errors)
+        self.calculate_errors(gps_errors)
+        self.calculate_pid_eq(gps_errors)
+        self.set_prev_vals(gps_errors)
         self.set_bounds()
         self.publish_attitude()
 
