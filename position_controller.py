@@ -14,19 +14,19 @@ class ControlSystem():
 
         # [x, y, z]
         self.position = [0.0, 0.0, 0.0]
-        self.position_stpnt = [19.0, 72.0, 6.0]
+        self.position_stpnt = [19.0, 72.0, 3.0]
 
         # [x, y, z]
-        self.Kp = [0, 0, 0]
+        self.Kp = [0, 0, 720]
         self.Ki = [0, 0, 0]
-        self.Kd = [0, 0, 0]
+        self.Kd = [0, 0, 4]
 
         self.prev_errors = [0.0, 0.0, 0.0]
         self.iTerm = [0.0, 0.0, 0.0]
         self.outputs = [0.0, 0.0, 0.0]
         self.min_value = 1000
         self.max_value = 2000
-        self.sample_time = 0.017
+        self.sample_time = 0.05
 
         # Outputs in the range [1000, 2000] to the attitude_controller
         self.drone_cmd = edrone_cmd()

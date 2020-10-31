@@ -36,7 +36,7 @@ class Edrone():
         self.thrust = 0.0
         self.min_value = 0
         self.max_value = 1023
-        self.sample_time = 0.017
+        self.sample_time = 0.05
 
         self.pwm_pub = rospy.Publisher('/edrone/pwm', prop_speed, queue_size=1)
         self.roll_error_pub = rospy.Publisher('/roll_error', Float32, queue_size=1)
