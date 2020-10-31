@@ -1,6 +1,5 @@
 #!/usr/bin/env python2
 
-import time
 import rospy
 from vitarana_drone.msg import *
 from pid_tune.msg import PidTune
@@ -13,11 +12,11 @@ class ControlSystem():
 
         rospy.init_node('position_controller')
 
-        # [latitude, longitude, altitude]
+        # [x, y, z]
         self.position = [0.0, 0.0, 0.0]
-        self.position_stpnt = [25, 100, 5]
+        self.position_stpnt = [19.0, 72.0, 6.0]
 
-        # [roll, pitch, altitude]
+        # [x, y, z]
         self.Kp = [0, 0, 0]
         self.Ki = [0, 0, 0]
         self.Kd = [0, 0, 0]
@@ -27,7 +26,7 @@ class ControlSystem():
         self.outputs = [0.0, 0.0, 0.0]
         self.min_value = 1000
         self.max_value = 2000
-        self.sample_time = 0.060
+        self.sample_time = 0.017
 
         # Outputs in the range [1000, 2000] to the attitude_controller
         self.drone_cmd = edrone_cmd()
@@ -37,16 +36,16 @@ class ControlSystem():
         self.drone_cmd.rcThrottle = 0.0
 
         self.drone_pub = rospy.Publisher('/drone_command', edrone_cmd, queue_size=1)
-        self.roll_error_pub = rospy.Publisher('/roll_error', Float32, queue_size=1)
-        self.pitch_error_pub = rospy.Publisher('/pitch_error', Float32, queue_size=1)
+        self.x_error_pub = rospy.Publisher('/x_error', Float32, queue_size=1)
+        self.y_error_pub = rospy.Publisher('/y_error', Float32, queue_size=1)
         self.z_error_pub = rospy.Publisher('/z_error', Float32, queue_size=1)
         self.zero_error_pub = rospy.Publisher('/zero_error', Float32, queue_size=1)
 
         rospy.Subscriber('/edrone/gps', NavSatFix, self.gps_callback)
         rospy.Subscriber('/edrone/range_finder_bottom', LaserScan, self.range_callback)
-        rospy.Subscriber('/pid_tuning_roll', PidTune, self.roll_set_pid)
-        rospy.Subscriber('/pid_tuning_pitch', PidTune, self.pitch_set_pid)
-        rospy.Subscriber('/pid_tuning_altitude', PidTune, self.alt_set_pid)
+        rospy.Subscriber('/pid_tuning_x', PidTune, self.x_set_pid)
+        rospy.Subscriber('/pid_tuning_y', PidTune, self.y_set_pid)
+        rospy.Subscriber('/pid_tuning_altitude', PidTune, self.z_set_pid)
 
     def gps_callback(self, msg):
         self.position[0] = msg.latitude
@@ -55,20 +54,20 @@ class ControlSystem():
     def range_callback(self, msg):
         self.position[2] = msg.ranges[0]
 
-    def roll_set_pid(self, roll):
-        self.Kp[0] = roll.Kp * 0.06
-        self.Ki[0] = roll.Ki * 0.008
-        self.Kd[0] = roll.Kd * 0.3
+    def x_set_pid(self, x):
+        self.Kp[0] = x.Kp * 0.5
+        self.Ki[0] = x.Ki * 0.008
+        self.Kd[0] = x.Kd * 0.05
 
-    def pitch_set_pid(self, pitch):
-        self.Kp[1] = pitch.Kp * 0.06
-        self.Ki[1] = pitch.Ki * 0.008
-        self.Kd[1] = pitch.Kd * 0.3
+    def y_set_pid(self, y):
+        self.Kp[1] = y.Kp * 0.5
+        self.Ki[1] = y.Ki * 0.008
+        self.Kd[1] = y.Kd * 0.05
 
-    def alt_set_pid(self, alt):
-        self.Kp[2] = alt.Kp * 0.06
-        self.Ki[2] = alt.Ki * 0.008
-        self.Kd[2] = alt.Kd * 0.3
+    def z_set_pid(self, z):
+        self.Kp[2] = z.Kp * 0.5
+        self.Ki[2] = z.Ki * 0.008
+        self.Kd[2] = z.Kd * 0.05
 
     def calculate_errors(self, errors):
         errors[0] = self.position_stpnt[0] - self.position[0]
@@ -84,9 +83,9 @@ class ControlSystem():
                  self.Kd[1] * (errors[1] - self.prev_errors[1]),
                  self.Kd[2] * (errors[2] - self.prev_errors[2])]
 
-        self.iTerm[0] += (self.Ki[0] * errors[0])
-        self.iTerm[1] += (self.Ki[1] * errors[1])
-        self.iTerm[2] += (self.Ki[2] * errors[2])
+        self.iTerm[0] = self.Ki[0] * (self.iTerm[0] + errors[0])
+        self.iTerm[1] = self.Ki[1] * (self.iTerm[1] + errors[1])
+        self.iTerm[2] = self.Ki[2] * (self.iTerm[2] + errors[2])
 
         self.outputs[0] = pTerm[0] + self.iTerm[0] + dTerm[0]
         self.outputs[1] = pTerm[1] + self.iTerm[1] + dTerm[1]
@@ -104,20 +103,20 @@ class ControlSystem():
             return self.min_value
         return rc_outputs
 
-    def set_rc_bounds(self):
+    def set_bounds(self):
         outputs = [i for i in self.outputs]
         [self.outputs[0],
          self.outputs[1],
          self.outputs[2]] = map(self.set_cmd_bounds, outputs)
 
-    def publish_values(self):
+    def publish_values(self, errors):
         self.drone_cmd.rcRoll = self.outputs[0]
         self.drone_cmd.rcPitch = self.outputs[1]
         self.drone_cmd.rcYaw = 1500.0
-        self.drone_cmd.rcThrottle = self.outputs[2]
+        self.drone_cmd.rcThrottle = 0 if self.outputs[2] == 0 else self.outputs[2]
 
-        self.roll_error_pub.publish(errors[0])
-        self.pitch_error_pub.publish(errors[1])
+        self.x_error_pub.publish(errors[0])
+        self.y_error_pub.publish(errors[1])
         self.z_error_pub.publish(errors[2])
         self.zero_error_pub.publish(0.0)
         self.drone_pub.publish(self.drone_cmd)
@@ -126,12 +125,9 @@ class ControlSystem():
         errors = [0.0, 0.0, 0.0]
         self.calculate_errors(errors)
         self.calculate_pid_eq(errors)
-        self.set_rc_bounds()
+        self.set_bounds()
         self.set_prev_vals(errors)
         self.publish_values(errors)
-        print 'Location: [{}, {}, {}]'.format(*self.position)
-        print 'Errors  : [{}, {}, {}]'.format(*errors)
-        print 'Outputs :  [{}, {}, {}]\n'.format(*self.outputs)
 
 if __name__ == '__main__':
     SYSTEM = ControlSystem()

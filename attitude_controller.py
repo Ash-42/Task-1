@@ -36,7 +36,7 @@ class Edrone():
         self.thrust = 0.0
         self.min_value = 0
         self.max_value = 1023
-        self.sample_time = 0.060
+        self.sample_time = 0.017
 
         self.pwm_pub = rospy.Publisher('/edrone/pwm', prop_speed, queue_size=1)
         self.roll_error_pub = rospy.Publisher('/roll_error', Float32, queue_size=1)
@@ -63,19 +63,19 @@ class Edrone():
         self.setpoint_cmd[3] = msg.rcThrottle
 
     def roll_set_pid(self, roll):
-        self.Kp[0] = roll.Kp
-        self.Ki[0] = roll.Ki * self.sample_time
-        self.Kd[0] = roll.Kd / self.sample_time
+        self.Kp[0] = roll.Kp * 0.5
+        self.Ki[0] = roll.Ki * 0.008
+        self.Kd[0] = roll.Kd * 0.05
 
     def pitch_set_pid(self, pitch):
-        self.Kp[1] = pitch.Kp
-        self.Ki[1] = pitch.Ki * self.sample_time
-        self.Kd[1] = pitch.Kd / self.sample_time
+        self.Kp[1] = pitch.Kp * 0.5
+        self.Ki[1] = pitch.Ki * 0.008
+        self.Kd[1] = pitch.Kd * 0.05
 
     def yaw_set_pid(self, yaw):
-        self.Kp[2] = yaw.Kp
-        self.Ki[2] = yaw.Ki * self.sample_time
-        self.Kd[2] = yaw.Kd / self.sample_time
+        self.Kp[2] = yaw.Kp * 0.5
+        self.Ki[2] = yaw.Ki * 0.008
+        self.Kd[2] = yaw.Kd * 0.05
 
     def transform_inputs(self):
         (self.drone_orientation_euler[1],
@@ -89,7 +89,6 @@ class Edrone():
         self.setpoint_euler[0] = self.setpoint_cmd[0] * 0.02 - 30
         self.setpoint_euler[1] = self.setpoint_cmd[1] * 0.02 - 30
         self.setpoint_euler[2] = self.setpoint_cmd[2] * 0.02 - 30
-
         self.thrust = self.setpoint_cmd[3] * 1.023 - 1023
 
     def calculate_errors(self, errors):
@@ -102,9 +101,9 @@ class Edrone():
                  self.Kp[1] * errors[1],
                  self.Kp[2] * errors[2]]
 
-        self.iTerm[0] += (self.Ki[0] * errors[0])
-        self.iTerm[1] += (self.Ki[1] * errors[1])
-        self.iTerm[2] += (self.Ki[2] * errors[2])
+        self.iTerm[0] = self.Ki[0] * (self.iTerm[0] + errors[0])
+        self.iTerm[1] = self.Ki[1] * (self.iTerm[1] + errors[1])
+        self.iTerm[2] = self.Ki[2] * (self.iTerm[2] + errors[2])
 
         dTerm = [self.Kd[0] * (errors[0] - self.prev_errors[0]),
                  self.Kd[1] * (errors[1] - self.prev_errors[1]),
@@ -136,7 +135,6 @@ class Edrone():
          self.pwm_cmd.prop2,
          self.pwm_cmd.prop3,
          self.pwm_cmd.prop4] = pwm_cmds = map(self.set_prop_bounds, pwm_cmds)
-        print 'Speeds: [{}, {}, {}, {}]'.format(*pwm_cmds)
 
     def set_prev_vals(self, errors):
         self.prev_errors[0] = errors[0]
@@ -158,11 +156,7 @@ class Edrone():
         self.calculate_prop_speeds()
         self.set_prev_vals(errors)
         self.publish_values(errors)
-        print 'Angles    : [{}, {}, {}]'.format(*self.drone_orientation_euler)
-        print 'rcAngles  : [{}, {}, {}]'.format(*self.setpoint_euler)
-        print 'rcThrottle: {}'.format(self.thrust)
-        print 'Errors    : [{}, {}, {}]'.format(*errors)
-        print 'Output PWM: [{}, {}, {}]\n'.format(*self.outputs)
+        print 'Thrust: {}'.format(self.thrust)
 
 if __name__ == '__main__':
     E_DRONE = Edrone()
